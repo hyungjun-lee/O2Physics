@@ -35,17 +35,19 @@ using namespace o2::framework;
 using namespace o2::framework::expressions;
 using namespace o2::aod::track;
 
-enum {
-    kECbegin = 0,
-    kDATA = 1,
-    kINEL,
-    kECend
-  };
-  enum {
-    kTrigbegin = 0,
-    kMBAND = 1,
-    kTrigend
-  };
+enum
+{
+  kECbegin = 0,
+  kDATA = 1,
+  kINEL,
+  kECend
+};
+enum
+{
+  kTrigbegin = 0,
+  kMBAND = 1,
+  kTrigend
+};
 
 AxisSpec ZAxis = {60, -30, 30, "zaxis"};
 AxisSpec DeltaZAxis = {61, -6.1, 6.1};
@@ -54,31 +56,32 @@ AxisSpec EtaAxis = {80, -4.0, 4.0, "etaaxis"};
 AxisSpec MultAxis = {301, -0.5, 300.5};
 AxisSpec PhiAxis = {629, 0, 2 * M_PI};
 AxisSpec PtAxis = {2401, -0.005, 24.005};
-AxisSpec EvtClassAxis = {kECend-1,kECbegin+0.5,kECend-0.5,"eventclass"};
-AxisSpec TrigClassAxis = {kTrigbegin-1,kTrigbegin+0.5,kTrigend-0.5,"triggclass"};
+AxisSpec EvtClassAxis = {kECend - 1, kECbegin + 0.5, kECend - 0.5, "eventclass"};
+AxisSpec TrigClassAxis = {kTrigbegin - 1, kTrigbegin + 0.5, kTrigend - 0.5, "triggclass"};
 std::vector<double> centBinning = {0., 20, 60., 90., 100};
 AxisSpec CentAxis = {centBinning, "centrality"};
 
 static constexpr TrackSelectionFlags::flagtype trackSelectionITS =
-  TrackSelectionFlags::kITSNCls | TrackSelectionFlags::kITSChi2NDF |
-  TrackSelectionFlags::kITSHits;
+    TrackSelectionFlags::kITSNCls | TrackSelectionFlags::kITSChi2NDF |
+    TrackSelectionFlags::kITSHits;
 
 static constexpr TrackSelectionFlags::flagtype trackSelectionTPC =
-  TrackSelectionFlags::kTPCNCls |
-  TrackSelectionFlags::kTPCCrossedRowsOverNCls |
-  TrackSelectionFlags::kTPCChi2NDF;
+    TrackSelectionFlags::kTPCNCls |
+    TrackSelectionFlags::kTPCCrossedRowsOverNCls |
+    TrackSelectionFlags::kTPCChi2NDF;
 
 static constexpr TrackSelectionFlags::flagtype trackSelectionDCA =
-  TrackSelectionFlags::kDCAz | TrackSelectionFlags::kDCAxy;
+    TrackSelectionFlags::kDCAz | TrackSelectionFlags::kDCAxy;
 
 using LabeledTracks = soa::Join<aod::Tracks, aod::McTrackLabels>;
 
-struct MultiplicityCounter {
+struct MultiplicityCounter
+{
   Service<TDatabasePDG> pdg;
 
   Configurable<float> estimatorEta{"estimatorEta", 1.0, "eta range for INEL>0 sample definition"};
   Configurable<bool> useEvSel{"useEvSel", true, "use event selection"};
-  //Configurable<bool> fillResponse{"fillResponse", false, "Fill response matrix"};
+  // Configurable<bool> fillResponse{"fillResponse", false, "Fill response matrix"};
   Configurable<bool> isMC{"isMC", false, "check if MC"};
   Service<ccdb::BasicCCDBManager> ccdb;
   Configurable<std::string> path{"ccdb-path", "Users/s/sherrman/My/Object", "base path to the ccdb object"};
@@ -86,25 +89,23 @@ struct MultiplicityCounter {
   Configurable<long> nolaterthan{"ccdb-no-later-than", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object"};
 
   HistogramRegistry registry{
-    "registry",
-    {
-      {"Events/Selection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},                                      //
-      {"hrecdndeta", "evntclass; triggerclass; centrality, zvtex, eta", {HistType::kTHnSparseD,{EvtClassAxis, TrigClassAxis, CentAxis, ZAxis, EtaAxis}}},   //
-      {"hgendndeta", "evntclass; centrality, zvtex, eta", {HistType::kTHnSparseD,{EvtClassAxis, CentAxis, ZAxis, EtaAxis}}},   //
-      {"hreczvtx", "evntclass; triggerclass; centrality, zvtex", {HistType::kTHnSparseD,{EvtClassAxis, TrigClassAxis, CentAxis, ZAxis}} },     //                                          
-      {"hgenzvtx", "evntclass; centrality, zvtex", {HistType::kTHnSparseD,{EvtClassAxis, CentAxis, ZAxis}} }      //                                          
-    }                                                                                                                  
+      "registry",
+      {
+          {"Events/Selection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},                                                                          //
+          {"hrecdndeta", "evntclass; triggerclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis, EtaAxis}}}, //
+          {"hgendndeta", "evntclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis, EtaAxis}}},                              //
+          {"hreczvtx", "evntclass; triggerclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis}}},                 //
+          {"hgenzvtx", "evntclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis}}}                                               //
+      }
 
   };
 
   std::vector<int> usedTracksIds;
 
-  
-
-  void init(InitContext&)
+  void init(InitContext &)
   {
     auto hstat = registry.get<TH1>(HIST("Events/Selection"));
-    auto* x = hstat->GetXaxis();
+    auto *x = hstat->GetXaxis();
     x->SetBinLabel(1, "All");
     x->SetBinLabel(2, "Selected");
     x->SetBinLabel(3, "Selected INEL>0");
@@ -112,23 +113,27 @@ struct MultiplicityCounter {
     x->SetBinLabel(5, "Good BCs");
     x->SetBinLabel(6, "BCs with collisions");
     x->SetBinLabel(7, "BCs with pile-up/splitting");
-
   }
 
   using FullBCs = soa::Join<aod::BCsWithTimestamps, aod::BcSels>;
   void processEventStat(
-    FullBCs const& bcs,
-    soa::Join<aod::Collisions, aod::EvSels> const& collisions)
+      FullBCs const &bcs,
+      soa::Join<aod::Collisions, aod::EvSels> const &collisions)
   {
     std::vector<typename std::decay_t<decltype(collisions)>::iterator> cols;
-    for (auto& bc : bcs) {
+    for (auto &bc : bcs)
+    {
       if (!useEvSel || (bc.selection()[evsel::kIsBBT0A] &
-                        bc.selection()[evsel::kIsBBT0C]) != 0) {
+                        bc.selection()[evsel::kIsBBT0C]) != 0)
+      {
         registry.fill(HIST("Events/Selection"), 5.);
         cols.clear();
-        for (auto& collision : collisions) {
-          if (collision.has_foundBC()) {
-            if (collision.foundBCId() == bc.globalIndex()) {
+        for (auto &collision : collisions)
+        {
+          if (collision.has_foundBC())
+          {
+            if (collision.foundBCId() == bc.globalIndex())
+            {
               cols.emplace_back(collision);
             }
           } else if (collision.bcId() == bc.globalIndex()) {
@@ -136,9 +141,11 @@ struct MultiplicityCounter {
           }
         }
         LOGP(debug, "BC {} has {} collisions", bc.globalBC(), cols.size());
-        if (!cols.empty()) {
+        if (!cols.empty())
+        {
           registry.fill(HIST("Events/Selection"), 6.);
-          if (cols.size() > 1) {
+          if (cols.size() > 1)
+          {
             registry.fill(HIST("Events/Selection"), 7.);
           }
         }
@@ -161,20 +168,17 @@ struct MultiplicityCounter {
                                      (nabs(aod::track::bestDCAZ) <= 2.f) &&
                                      (nabs(aod::track::bestDCAXY) <= ((0.0105f + 0.0350f / npow(aod::track::pts, 1.1f))));
 
-  
-
-  
   std::vector<Double_t> tracketas;
   void processCounting(
-    soa::Join<aod::Collisions, aod::EvSels>::iterator const& collision,
-    FiTracks const& tracks,
-    soa::SmallGroups<aod::ReassignedTracks> const& atracks) // soa::Join<aod::AmbiguousTracks, aod::BestCollisions>
+      soa::Join<aod::Collisions, aod::EvSels>::iterator const &collision,
+      FiTracks const &tracks,
+      soa::SmallGroups<aod::ReassignedTracks> const &atracks) // soa::Join<aod::AmbiguousTracks, aod::BestCollisions>
   {
-
 
     registry.fill(HIST("Events/Selection"), 1.);
     Bool_t IsMB0 = false;
-    if (!useEvSel || collision.sel8()) {
+    if (!useEvSel || collision.sel8())
+    {
       registry.fill(HIST("Events/Selection"), 2.);
       auto z = collision.posZ();
       registry.fill(HIST("hreczvtx"), Double_t(kDATA), Double_t(kMBAND), 50., z);
@@ -197,23 +201,24 @@ struct MultiplicityCounter {
       }*/
 
       tracketas.clear();
-      for (auto& track : atracks) {
+      for (auto &track : atracks)
+      {
         tracketas.push_back(track.etas());
       }
-      for (auto& track : tracks) {
-        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end()) {
+      for (auto &track : tracks)
+      {
+        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end())
+        {
           continue;
         }
         tracketas.push_back(track.eta());
-
       }
 
-
-      for (auto eta : tracketas){
+      for (auto eta : tracketas)
+      {
         registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, eta);
-        //registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, 1);
+        // registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, 1);
       }
-
     }
   }
   PROCESS_SWITCH(MultiplicityCounter, processCounting, "Count tracks", false);
@@ -228,20 +233,22 @@ struct MultiplicityCounter {
                                      (nabs(aod::mcparticle::eta) < estimatorEta);
 
   Preslice<FiTracks> perCol = aod::track::collisionId;
-  
 
   Partition<soa::Filtered<LabeledTracksEx>> lsample = nabs(aod::track::eta) < estimatorEta;
   void processMCCounting(
-    soa::Join<aod::Collisions, aod::EvSels, aod::McCollisionLabels> const& collisions,
-    aod::McCollisions const&, Particles const& mcParticles,
-    soa::Filtered<LabeledTracksEx> const&,
-    soa::SmallGroups<aod::ReassignedTracks> const& atracks)
+      soa::Join<aod::Collisions, aod::EvSels, aod::McCollisionLabels> const &collisions,
+      aod::McCollisions const &, Particles const &mcParticles,
+      soa::Filtered<LabeledTracksEx> const &,
+      soa::SmallGroups<aod::ReassignedTracks> const &atracks)
   {
-    for (auto& collision : collisions) {
-      if (useEvSel && !collision.sel8()) {
+    for (auto &collision : collisions)
+    {
+      if (useEvSel && !collision.sel8())
+      {
         continue;
       }
-      if (!collision.has_mcCollision()) {
+      if (!collision.has_mcCollision())
+      {
         continue;
       }
       auto z = collision.posZ();
@@ -252,76 +259,82 @@ struct MultiplicityCounter {
       tracks.bindExternalIndices(&mcParticles);
 
       usedTracksIds.clear();
-      for (auto& track : atracks) {
+      for (auto &track : atracks)
+      {
         auto ttrack = track.track_as<soa::Filtered<LabeledTracksEx>>();
         usedTracksIds.emplace_back(ttrack.globalIndex());
-        if (ttrack.has_mcParticle()) {
-          //registry.fill(HIST("hrecdndeta"), Double_t(kDATA), Double_t(kMBAND), 50., z, ttrack.mcParticle_as<Particles>().eta());
+        if (ttrack.has_mcParticle())
+        {
+          // registry.fill(HIST("hrecdndeta"), Double_t(kDATA), Double_t(kMBAND), 50., z, ttrack.mcParticle_as<Particles>().eta());
           registry.fill(HIST("hrecdndeta"), Double_t(kINEL), 50., z, ttrack.mcParticle_as<Particles>().eta());
         } else {
-          // when secondary 
+          // when secondary
         }
       }
-      for (auto& track : tracks) {
-        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end()) {
+      for (auto &track : tracks)
+      {
+        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end())
+        {
           continue;
         }
-        if (track.has_mcParticle()) {
-          //registry.fill(HIST("hrecdndeta"), Double_t(kDATA), Double_t(kMBAND), 50., z, track.mcParticle_as<Particles>().eta());
-          registry.fill(HIST("hrecdndeta"), Double_t(kINEL),50., z, track.mcParticle_as<Particles>().eta());
-          //registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, 2);
+        if (track.has_mcParticle())
+        {
+          // registry.fill(HIST("hrecdndeta"), Double_t(kDATA), Double_t(kMBAND), 50., z, track.mcParticle_as<Particles>().eta());
+          registry.fill(HIST("hrecdndeta"), Double_t(kINEL), 50., z, track.mcParticle_as<Particles>().eta());
+          // registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, 2);
         } else {
-          //when secondary
+          // when secondary
         }
       }
     }
-
   }
   PROCESS_SWITCH(MultiplicityCounter, processMCCounting, "MC Count tracks", false);
 
-
-
-
-
   Partition<aod::MFTTracks> sample = (aod::fwdtrack::eta < -2.8f) && (aod::fwdtrack::eta > -3.2f);
   expressions::Filter atrackFilterForward = (aod::fwdtrack::bestCollisionId >= 0) &&
-                                     (aod::fwdtrack::etas < -2.0f) &&
-                                     (aod::fwdtrack::etas > -3.9f) &&
-                                     (nabs(aod::fwdtrack::bestDCAXY) <= 2.f);
-  void  processForwardCounting (soa::Join<aod::Collisions, aod::EvSels>::iterator const& collision, aod::MFTTracks const& tracks, soa::SmallGroups<soa::Join<aod::AmbiguousMFTTracks, aod::BestCollisionsFwd>> const& atracks)
+                                            (aod::fwdtrack::etas < -2.0f) &&
+                                            (aod::fwdtrack::etas > -3.9f) &&
+                                            (nabs(aod::fwdtrack::bestDCAXY) <= 2.f);
+  void processForwardCounting(soa::Join<aod::Collisions, aod::EvSels>::iterator const &collision, aod::MFTTracks const &tracks, soa::SmallGroups<soa::Join<aod::AmbiguousMFTTracks, aod::BestCollisionsFwd>> const &atracks)
   {
-    if (!useEvSel || (useEvSel && collision.sel8())) {
+    if (!useEvSel || (useEvSel && collision.sel8()))
+    {
       usedTracksIds.clear();
       auto z = collision.posZ();
-      for (auto& track : atracks) {
+      for (auto &track : atracks)
+      {
         usedTracksIds.emplace_back(track.mfttrackId());
-        registry.fill(HIST("hrecdndeta"), 1 , 1, 50., z, track.etas() );
+        registry.fill(HIST("hrecdndeta"), 1, 1, 50., z, track.etas());
       }
-      for (auto& track : tracks) {
-        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end()) {
+      for (auto &track : tracks)
+      {
+        if (std::find(usedTracksIds.begin(), usedTracksIds.end(), track.globalIndex()) != usedTracksIds.end())
+        {
           continue;
         }
-        registry.fill(HIST("hrecdndeta"), 1 , 1, 50., z, track.eta() );
-        //registry.fill(HIST("hrecdndeta"), 1 , 1, 50., z, 3);
+        registry.fill(HIST("hrecdndeta"), 1, 1, 50., z, track.eta());
+        // registry.fill(HIST("hrecdndeta"), 1 , 1, 50., z, 3);
       }
     }
   }
-  PROCESS_SWITCH(MultiplicityCounter, processForwardCounting , "Count MFT tracks", false);
+  PROCESS_SWITCH(MultiplicityCounter, processForwardCounting, "Count MFT tracks", false);
 
- 
   void processGen(
-    aod::McCollisions::iterator const& mcCollision,
-    o2::soa::SmallGroups<soa::Join<aod::Collisions, aod::EvSels, aod::McCollisionLabels>> const& collisions,
-    Particles const& particles, FiTracks const& tracks)
+      aod::McCollisions::iterator const &mcCollision,
+      o2::soa::SmallGroups<soa::Join<aod::Collisions, aod::EvSels, aod::McCollisionLabels>> const &collisions,
+      Particles const &particles, FiTracks const &tracks)
   {
     auto perCollisionMCSample = mcSample->sliceByCached(aod::mcparticle::mcCollisionId, mcCollision.globalIndex());
     auto genz = mcCollision.posZ();
-    registry.fill(HIST("hgenzvtx"), double(kINEL), 50., genz);
-    for (auto& particle : perCollisionMCSample) {
+    registry.fill(HIST("hgenzvtx"), Double_t(kINEL), 50., genz);
+    for (auto &particle : perCollisionMCSample)
+    {
       auto p = pdg->GetParticle(particle.pdgCode());
-      if (p != nullptr) {
-        if (std::abs(p->Charge()) >= 3) {
-          registry.fill(HIST("hgendndeta"), double(kINEL), 50., genz, particle.eta());
+      if (p != nullptr)
+      {
+        if (std::abs(p->Charge()) >= 3)
+        {
+          registry.fill(HIST("hgendndeta"), Double_t(kINEL), 50., genz, particle.eta());
         }
       }
     }
@@ -329,7 +342,7 @@ struct MultiplicityCounter {
   PROCESS_SWITCH(MultiplicityCounter, processGen, "Process generator-level info", false);
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
+WorkflowSpec defineDataProcessing(ConfigContext const &cfgc)
 {
   return WorkflowSpec{adaptAnalysisTask<MultiplicityCounter>(cfgc)};
 }
