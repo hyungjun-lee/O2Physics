@@ -9,9 +9,9 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 
+#include <chrono>
 #include <cmath>
 #include <iostream>
-#include <chrono>
 #include "bestCollisionTable.h"
 #include "CCDB/BasicCCDBManager.h"
 #include "Common/CCDB/EventSelectionParams.h"
@@ -80,19 +80,14 @@ struct MultiplicityCounter {
   Configurable<bool> useEvSel{"useEvSel", true, "use event selection"};
   Configurable<bool> isMC{"isMC", false, "check if MC"};
   Service<ccdb::BasicCCDBManager> ccdb;
-  Configurable<std::string> path{"ccdb-path", "Users/s/sherrman/My/Object", "base path to the ccdb object"};
-  Configurable<std::string> url{"ccdb-url", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
-  Configurable<int64_t> nolaterthan{"ccdb-no-later-than", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object"};
 
   HistogramRegistry registry{
     "registry",
-    {
-      {"Events/Selection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},                                                                          //
-      {"hrecdndeta", "evntclass; triggerclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis, EtaAxis}}}, //
-      {"hgendndeta", "evntclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis, EtaAxis}}},                              //
-      {"hreczvtx", "evntclass; triggerclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis}}},                 //
-      {"hgenzvtx", "evntclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis}}}                                               //
-    }
+    {{"Events/Selection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},
+     {"hrecdndeta", "evntclass; triggerclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis, EtaAxis}}},
+     {"hgendndeta", "evntclass; centrality, zvtex, eta", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis, EtaAxis}}},
+     {"hreczvtx", "evntclass; triggerclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, TrigClassAxis, CentAxis, ZAxis}}},
+     {"hgenzvtx", "evntclass; centrality, zvtex", {HistType::kTHnSparseD, {EvtClassAxis, CentAxis, ZAxis}}}}
 
   };
 
@@ -148,7 +143,11 @@ struct MultiplicityCounter {
   void processCounting(
     soa::Join<aod::Collisions, aod::EvSels>::iterator const& collision,
     FiTracks const& tracks,
+<<<<<<< HEAD
     soa::SmallGroups<aod::ReassignedTracksCore> const& atracks) // soa::Join<aod::AmbiguousTracks, aod::BestCollisions>
+=======
+    soa::SmallGroups<aod::ReassignedTracksCore> const& atracks)
+>>>>>>> 9432a641577f0272b0a46d44617372812e777050
   {
 
     registry.fill(HIST("Events/Selection"), 1.);
@@ -161,7 +160,10 @@ struct MultiplicityCounter {
       tracketas.clear();
       for (auto& track : atracks) {
         auto otrack = track.track_as<FiTracks>();
+<<<<<<< HEAD
         // tracketas.push_back(track.etas());
+=======
+>>>>>>> 9432a641577f0272b0a46d44617372812e777050
         tracketas.push_back(otrack.eta());
       }
       for (auto& track : tracks) {
@@ -172,8 +174,12 @@ struct MultiplicityCounter {
       }
 
       for (auto eta : tracketas) {
+<<<<<<< HEAD
         registry.fill(HIST("hrecdndeta"), Double_t(kDATA), Double_t(kMBAND), 50., z, eta);
         // registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, 1);
+=======
+        registry.fill(HIST("hrecdndeta"), Double_t(kINEL), Double_t(kMBAND), 50., z, eta);
+>>>>>>> 9432a641577f0272b0a46d44617372812e777050
       }
     }
   }
@@ -233,8 +239,12 @@ struct MultiplicityCounter {
       }
     }
   }
+
+<<<<<<< HEAD
+=======
   PROCESS_SWITCH(MultiplicityCounter, processMCCounting, "MC Count tracks", false);
 
+>>>>>>> 9432a641577f0272b0a46d44617372812e777050
   void processGen(
     aod::McCollisions::iterator const& mcCollision,
     o2::soa::SmallGroups<soa::Join<aod::Collisions, aod::EvSels, aod::McCollisionLabels>> const& collisions,
