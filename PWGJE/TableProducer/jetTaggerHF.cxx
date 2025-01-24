@@ -93,8 +93,7 @@ struct JetTaggerHFTask {
   Configurable<int64_t> timestampCCDB{"timestampCCDB", -1, "timestamp of the ONNX file for ML model used to query in CCDB"};
   Configurable<bool> loadModelsFromCCDB{"loadModelsFromCCDB", false, "Flag to enable or disable the loading of models from CCDB"};
 
-  Configurable<std::string> IPparameterPathsCCDB{"IPparameterPathsCCDB", "Users/l/leehy/LHC24g4/", "Paths for fitting parameters of resolution functions for IP method on CCDB"};
-  Configurable<std::vector<int64_t>> IPtimestampCCDB{"IPtimestampCCDB", std::vector<int64_t>{1737027389227, 1737027391774, 1737027393668, 1737027395548, 1737027397505, 1737027399396, 1737027401294}, "timestamp of the resolution function for IP method used to query in CCDB"};
+  Configurable<std::vector<std::string>> IPparameterPathsCCDB{"IPparameterPathsCCDB", std::vector<std::string>{"Users/l/leehy/LHC24g4/f_inclusive_0", "Users/l/leehy/LHC24g4/f_inclusive_1", "Users/l/leehy/LHC24g4/f_inclusive_2", "Users/l/leehy/LHC24g4/f_inclusive_3", "Users/l/leehy/LHC24g4/f_inclusive_4", "Users/l/leehy/LHC24g4/f_inclusive_5", "Users/l/leehy/LHC24g4/f_inclusive_6"}, "Paths for fitting parameters of resolution functions for IP method on CCDB"};
   Configurable<bool> usepTcategorize{"usepTcategorize", false, "p_T categorize TF1 function with Inclusive jet"};
 
   // axis spec
@@ -116,22 +115,7 @@ struct JetTaggerHFTask {
   std::unique_ptr<TF1> fSignImpXYSigBeautyJetMC = nullptr;
   std::unique_ptr<TF1> fSignImpXYSigLfJetMC = nullptr;
 
-  std::vector<float> vecParamsIncJetMC_CCDB_0;
-  std::vector<float> vecParamsIncJetMC_CCDB_1;
-  std::vector<float> vecParamsIncJetMC_CCDB_2;
-  std::vector<float> vecParamsIncJetMC_CCDB_3;
-  std::vector<float> vecParamsIncJetMC_CCDB_4;
-  std::vector<float> vecParamsIncJetMC_CCDB_5;
-  std::vector<float> vecParamsIncJetMC_CCDB_6;
-
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_0 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_1 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_2 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_3 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_4 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_5 = nullptr;
-  std::unique_ptr<TF1> fSignImpXYSigIncJetMC_CCDB_6 = nullptr;
-
+  std::vector<std::vector<float>> vecParamsIncJetMC_CCDB;
   std::vector<std::unique_ptr<TF1>> fSignImpXYSigIncJetMC_CCDB_vec;
 
   std::vector<uint16_t> decisionNonML;
@@ -232,25 +216,15 @@ struct JetTaggerHFTask {
     std::vector<float> vecParamsBeautyJetMC;
     std::vector<float> vecParamsLfJetMC;
 
-    TF1* CCDB_ResoFunc_0 = nullptr;
-    TF1* CCDB_ResoFunc_1 = nullptr;
-    TF1* CCDB_ResoFunc_2 = nullptr;
-    TF1* CCDB_ResoFunc_3 = nullptr;
-    TF1* CCDB_ResoFunc_4 = nullptr;
-    TF1* CCDB_ResoFunc_5 = nullptr;
-    TF1* CCDB_ResoFunc_6 = nullptr;
+    std::vector<TF1*> CCDB_ResoFunc;
 
     ccdbApi.init(ccdbUrl);
     if (usepTcategorize) {
       std::map<std::string, std::string> metadata; // dummy meta data (will be updated)
       // fill the timestamp directly of each TF1 according to p_T track range
-      CCDB_ResoFunc_0 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(0)); // 0 < p_T < 0.5
-      CCDB_ResoFunc_1 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(1)); // 0.5 < p_T < 1
-      CCDB_ResoFunc_2 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(2)); // 1 < p_T < 2
-      CCDB_ResoFunc_3 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(3)); // 2 < p_T < 4
-      CCDB_ResoFunc_4 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(4)); // 4 < p_T < 6
-      CCDB_ResoFunc_5 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(5)); // 6 < p_T < 9
-      CCDB_ResoFunc_6 = ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB, metadata, IPtimestampCCDB->at(6)); // 9 < p_T
+      for (int i = 0; i < 7; i++) {
+        CCDB_ResoFunc.push_back(ccdbApi.retrieveFromTFileAny<TF1>(IPparameterPathsCCDB->at(i), metadata, -1));
+      }
     }
 
     maxOrder = numCount + 1; // 0: untagged, >1 : N ordering
@@ -299,17 +273,20 @@ struct JetTaggerHFTask {
         break;
       case 6: // TODO
         vecParamsData = (std::vector<float>)paramsResoFuncData;
-        for (int i = 0; i < 9; i++) {
-          vecParamsIncJetMC_CCDB_0.emplace_back(CCDB_ResoFunc_0->GetParameter(i));
-          vecParamsIncJetMC_CCDB_1.emplace_back(CCDB_ResoFunc_1->GetParameter(i));
-          vecParamsIncJetMC_CCDB_2.emplace_back(CCDB_ResoFunc_2->GetParameter(i));
-          vecParamsIncJetMC_CCDB_3.emplace_back(CCDB_ResoFunc_3->GetParameter(i));
-          vecParamsIncJetMC_CCDB_4.emplace_back(CCDB_ResoFunc_4->GetParameter(i));
-          vecParamsIncJetMC_CCDB_5.emplace_back(CCDB_ResoFunc_5->GetParameter(i));
-          vecParamsIncJetMC_CCDB_6.emplace_back(CCDB_ResoFunc_6->GetParameter(i));
+        vecParamsIncJetMC = (std::vector<float>)paramsResoFuncData;
+        for (size_t j = 0; j < CCDB_ResoFunc.size(); j++) {
+          std::vector<float> params;
+          if (CCDB_ResoFunc[j]) {
+            for (int i = 0; i < 9; i++) {
+              params.emplace_back(CCDB_ResoFunc[j]->GetParameter(i));
+            }
+          }
+          vecParamsIncJetMC_CCDB.emplace_back(params);
         }
         LOG(info) << "defined parameters of resolution function from CCDB";
         useResoFuncFromIncJet = true;
+        break;
+
       default:
         LOG(fatal) << "undefined parameters of resolution function. Fix it!";
         break;
@@ -321,21 +298,9 @@ struct JetTaggerHFTask {
     fSignImpXYSigBeautyJetMC = jettaggingutilities::setResolutionFunction(vecParamsBeautyJetMC);
     fSignImpXYSigLfJetMC = jettaggingutilities::setResolutionFunction(vecParamsLfJetMC);
 
-    fSignImpXYSigIncJetMC_CCDB_0 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_0);
-    fSignImpXYSigIncJetMC_CCDB_1 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_1);
-    fSignImpXYSigIncJetMC_CCDB_2 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_2);
-    fSignImpXYSigIncJetMC_CCDB_3 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_3);
-    fSignImpXYSigIncJetMC_CCDB_4 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_4);
-    fSignImpXYSigIncJetMC_CCDB_5 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_5);
-    fSignImpXYSigIncJetMC_CCDB_6 = jettaggingutilities::setResolutionFunction(vecParamsIncJetMC_CCDB_6);
-
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_0));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_1));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_2));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_3));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_4));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_5));
-    fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(std::move(fSignImpXYSigIncJetMC_CCDB_6));
+    for (const auto& params : vecParamsIncJetMC_CCDB) {
+      fSignImpXYSigIncJetMC_CCDB_vec.emplace_back(jettaggingutilities::setResolutionFunction(params));
+    }
 
     // Use QA for effectivness of track probability
     if (trackProbQA) {
