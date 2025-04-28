@@ -8,10 +8,18 @@
 // In applying this license CERN does not waive the privileges and immunities
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
-
-//
-// Task to add a table of track parameters propagated to the primary vertex
-//
+/// \file onTheFlyTOFPID.cxx
+///
+/// \brief This task goes straight from a combination of track table and mcParticles
+/// and a custom TOF configuration to a table of TOF NSigmas for the particles
+/// being analysed. It currently contemplates 5 particle types:
+/// electrons, pions, kaons, protons and muons
+///
+/// More particles could be added but would have to be added to the LUT
+/// being used in the onTheFly tracker task.
+///
+/// \author David Dobrigkeit Chinellato, UNICAMP
+/// \author Nicola Nicassio, University and INFN Bari
 
 #include <utility>
 #include <map>
@@ -45,24 +53,13 @@
 #include "TableHelper.h"
 #include "ALICE3/Core/DelphesO2TrackSmearer.h"
 
-/// \file onTheFlyTOFPID.cxx
-///
-/// \brief This task goes straight from a combination of track table and mcParticles
-/// and a custom TOF configuration to a table of TOF NSigmas for the particles
-/// being analysed. It currently contemplates 5 particle types:
-/// electrons, pions, kaons, protons and muons
-///
-/// More particles could be added but would have to be added to the LUT
-/// being used in the onTheFly tracker task.
-///
-/// \author David Dobrigkeit Chinellato, UNICAMP, Nicola Nicassio, University and INFN Bari
-
 using namespace o2;
 using namespace o2::framework;
 
 struct OnTheFlyTofPid {
   Produces<aod::UpgradeTofMC> upgradeTofMC;
   Produces<aod::UpgradeTof> upgradeTof;
+  Produces<aod::UpgradeTofExpectedTime> upgradeTofExpectedTime;
 
   // necessary for particle charges
   Service<o2::framework::O2DatabasePDG> pdg;
@@ -141,7 +138,7 @@ struct OnTheFlyTofPid {
       mapPdgLut.insert(std::make_pair(321, lutKaChar));
       mapPdgLut.insert(std::make_pair(2212, lutPrChar));
 
-      for (auto e : mapPdgLut) {
+      for (const auto& e : mapPdgLut) {
         if (!mSmearer.loadTable(e.first, e.second)) {
           LOG(fatal) << "Having issue with loading the LUT " << e.first << " " << e.second;
         }
@@ -149,10 +146,13 @@ struct OnTheFlyTofPid {
     }
 
     if (plotsConfig.doQAplots) {
+      const AxisSpec axisdNdeta{200, 0.0f, 1000.0f, Form("dN/d#eta in |#eta| < %f", simConfig.multiplicityEtaRange.value)};
+
+      histos.add("h1dNdeta", "h2dNdeta", kTH1F, {axisdNdeta});
       histos.add("h2dEventTime", "h2dEventTime", kTH2F, {{200, -1000, 1000, "computed"}, {200, -1000, 1000, "generated"}});
       histos.add("h1dEventTimegen", "h1dEventTimegen", kTH1F, {{200, -1000, 1000, "generated"}});
       histos.add("h1dEventTimerec", "h1dEventTimerec", kTH1F, {{200, -1000, 1000, "computed"}});
-      histos.add("h1dEventTimeres", "h1dEventTimeres", kTH1F, {{300, 0, 300, "resolution"}});
+      histos.add("h2dEventTimeres", "h2dEventTimeres", kTH2F, {axisdNdeta, {300, 0, 300, "resolution"}});
 
       const AxisSpec axisMomentum{static_cast<int>(plotsConfig.nBinsP), 0.0f, +10.0f, "#it{p} (GeV/#it{c})"};
       const AxisSpec axisMomentumSmall{static_cast<int>(plotsConfig.nBinsP), 0.0f, +1.0f, "#it{p} (GeV/#it{c})"};
@@ -350,7 +350,8 @@ struct OnTheFlyTofPid {
     float sum = 0.;
     float sumw = 0.;
 
-    for (auto& track : tracks) {
+    // Todo: check the different mass hypothesis iteratively
+    for (const auto& track : tracks) {
       auto pdgInfo = pdg->GetParticle(track.mPdgCode);
       if (pdgInfo == nullptr) {
         continue;
@@ -426,7 +427,7 @@ struct OnTheFlyTofPid {
 
     std::array<float, 6> mcPvCov = {0.};
     o2::dataformats::VertexBase mcPvVtx({0.0f, 0.0f, 0.0f}, mcPvCov);
-    const float eventCollisionTimePS = collision.collisionTime() * 1e3; // convert ns to ps
+    const float eventCollisionTimePS = (simConfig.considerEventTime.value ? collision.collisionTime() * 1e3 : 0.f); // convert ns to ps
     if (collision.has_mcCollision()) {
       auto mcCollision = collision.mcCollision();
       mcPvVtx.setX(mcCollision.posX());
@@ -457,6 +458,9 @@ struct OnTheFlyTofPid {
         }
         dNdEta += 1.f;
       }
+    }
+    if (plotsConfig.doQAplots) {
+      histos.fill(HIST("h1dNdeta"), dNdEta);
     }
 
     tracksWithTime.clear(); // clear the vector of tracks with time to prepare the cache for the next event
@@ -518,16 +522,18 @@ struct OnTheFlyTofPid {
     // Now we compute the event time for the tracks
 
     std::array<float, 2> tzero = {0.f, 0.f};
-    const bool etStatus = eventTime(tracksWithTime, tzero);
-    if (!etStatus) {
-      LOG(warning) << "Event time calculation failed with " << tracksWithTime.size() << " tracks";
+    if (simConfig.considerEventTime.value) {
+      const bool etStatus = eventTime(tracksWithTime, tzero);
+      if (!etStatus) {
+        LOG(warning) << "Event time calculation failed with " << tracksWithTime.size() << " tracks";
+      }
     }
 
     if (plotsConfig.doQAplots) {
       histos.fill(HIST("h2dEventTime"), tzero[0], eventCollisionTimePS);
       histos.fill(HIST("h1dEventTimegen"), eventCollisionTimePS);
       histos.fill(HIST("h1dEventTimerec"), tzero[0]);
-      histos.fill(HIST("h1dEventTimeres"), tzero[1]);
+      histos.fill(HIST("h2dEventTimeres"), dNdEta, tzero[1]);
     }
 
     // Then we do a second loop to compute the measured quantities with the measured event time
@@ -542,6 +548,7 @@ struct OnTheFlyTofPid {
       const float trackLengthRecoOuterTOF = trkWithTime.mTrackLengthOuterTOF.first;
       const float trackLengthInnerTOF = trkWithTime.mTrackLengthInnerTOF.second;
       const float trackLengthOuterTOF = trkWithTime.mTrackLengthOuterTOF.second;
+      // Todo: remove the bias of the track used in the event time calculation for low multiplicity events
       const float measuredTimeInnerTOF = trkWithTime.mInnerTOFTime.first - tzero[0];
       const float measuredTimeOuterTOF = trkWithTime.mOuterTOFTime.first - tzero[0];
       const float momentum = trkWithTime.mMomentum.first;
@@ -549,8 +556,9 @@ struct OnTheFlyTofPid {
       const float noSmearingPt = trkWithTime.mNoSmearingPt;
 
       // Straight to Nsigma
-      float deltaTimeInnerTOF[5], nSigmaInnerTOF[5];
-      float deltaTimeOuterTOF[5], nSigmaOuterTOF[5];
+      static std::array<float, 5> expectedTimeInnerTOF, expectedTimeOuterTOF;
+      static std::array<float, 5> deltaTimeInnerTOF, deltaTimeOuterTOF;
+      static std::array<float, 5> nSigmaInnerTOF, nSigmaOuterTOF;
       static constexpr int lpdg_array[5] = {kElectron, kMuonMinus, kPiPlus, kKPlus, kProton};
       float masses[5];
 
@@ -576,8 +584,13 @@ struct OnTheFlyTofPid {
 
         auto pdgInfoThis = pdg->GetParticle(lpdg_array[ii]);
         masses[ii] = pdgInfoThis->Mass();
-        deltaTimeInnerTOF[ii] = trackLengthRecoInnerTOF / velocity(momentum, masses[ii]) - measuredTimeInnerTOF;
-        deltaTimeOuterTOF[ii] = trackLengthRecoOuterTOF / velocity(momentum, masses[ii]) - measuredTimeOuterTOF;
+        const float v = velocity(momentum, masses[ii]);
+
+        expectedTimeInnerTOF[ii] = trackLengthInnerTOF / v;
+        expectedTimeOuterTOF[ii] = trackLengthOuterTOF / v;
+
+        deltaTimeInnerTOF[ii] = measuredTimeInnerTOF - expectedTimeInnerTOF[ii];
+        deltaTimeOuterTOF[ii] = measuredTimeOuterTOF - expectedTimeInnerTOF[ii];
 
         // Evaluate total sigma (layer + tracking resolution)
         float innerTotalTimeReso = simConfig.innerTOFTimeReso;
@@ -769,6 +782,8 @@ struct OnTheFlyTofPid {
                  measuredTimeInnerTOF, trackLengthRecoInnerTOF,
                  nSigmaOuterTOF[0], nSigmaOuterTOF[1], nSigmaOuterTOF[2], nSigmaOuterTOF[3], nSigmaOuterTOF[4],
                  measuredTimeOuterTOF, trackLengthRecoOuterTOF);
+      upgradeTofExpectedTime(expectedTimeInnerTOF[0], expectedTimeInnerTOF[1], expectedTimeInnerTOF[2], expectedTimeInnerTOF[3], expectedTimeInnerTOF[4],
+                             expectedTimeOuterTOF[0], expectedTimeOuterTOF[1], expectedTimeOuterTOF[2], expectedTimeOuterTOF[3], expectedTimeOuterTOF[4]);
     }
   }
 };
