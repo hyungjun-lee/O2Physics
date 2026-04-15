@@ -177,7 +177,6 @@ static constexpr TrackSelectionFlags::flagtype trackSelectionTPC =
 static constexpr TrackSelectionFlags::flagtype trackSelectionDCA =
   TrackSelectionFlags::kDCAz | TrackSelectionFlags::kDCAxy;
 
-
 struct MultiplicityCounter {
   SliceCache cache;
   Preslice<Particles> perMCCol = aod::mcparticle::mcCollisionId;
