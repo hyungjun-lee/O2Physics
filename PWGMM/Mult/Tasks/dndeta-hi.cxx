@@ -34,6 +34,7 @@
 
 #include <TH1.h>
 #include <TMath.h>
+#include <TPDGCode.h>
 
 #include <RtypesCore.h>
 
@@ -75,6 +76,9 @@ enum {
   kDATA = 1,
   kINEL,
   kINELg0,
+  kDD,
+  kSD,
+  kND,
   kECend
 };
 enum {
@@ -173,9 +177,11 @@ static constexpr TrackSelectionFlags::flagtype trackSelectionTPC =
 static constexpr TrackSelectionFlags::flagtype trackSelectionDCA =
   TrackSelectionFlags::kDCAz | TrackSelectionFlags::kDCAxy;
 
+
 struct MultiplicityCounter {
   SliceCache cache;
-  Preslice<aod::McParticles> perMCCol = aod::mcparticle::mcCollisionId;
+  Preslice<Particles> perMCCol = aod::mcparticle::mcCollisionId;
+  Preslice<FiTracks> perCol = aod::track::collisionId;
 
   Service<o2::framework::O2DatabasePDG> pdg;
 
@@ -236,9 +242,9 @@ struct MultiplicityCounter {
     std::vector<Double_t> logbins(nbins + 1, 0);
     Double_t low = 0.01;
     Double_t high = 10;
-    Double_t logbw = (log(high) - log(low)) / nbins;
+    Double_t logbw = (std::log(high) - std::log(low)) / nbins;
     for (int ij = 0; ij <= nbins; ij++) {
-      logbins[ij] = low * exp(ij * logbw);
+      logbins[ij] = low * std::exp(ij * logbw);
     }
     AxisSpec ptbins2 = {logbins, "pT (GeV/c)", "pt bin"};
 
@@ -280,12 +286,12 @@ struct MultiplicityCounter {
     soa::Join<aod::Collisions, aod::EvSels> const& collisions)
   {
     std::vector<typename std::decay_t<decltype(collisions)>::iterator> cols;
-    for (auto& bc : bcs) {
+    for (const auto& bc : bcs) {
       if (!useEvSel || (bc.selection_bit(o2::aod::evsel::kIsBBT0A) &&
                         bc.selection_bit(o2::aod::evsel::kIsBBT0C)) != 0) {
         registry.fill(HIST("Selection"), 5.);
         cols.clear();
-        for (auto& collision : collisions) {
+        for (const auto& collision : collisions) {
           if (collision.has_foundBC()) {
             if (collision.foundBCId() == bc.globalIndex()) {
               cols.emplace_back(collision);
@@ -314,11 +320,11 @@ struct MultiplicityCounter {
     FiTracks const& /*tracks*/)
   {
 
-    for (auto& collision : collisions) {
+    for (const auto& collision : collisions) {
       Bool_1d btrigc(kTrigend, false);
       registry.fill(HIST("Selection"), 1.);
       auto z = collision.posZ();
-      auto pertracks = tSample3->sliceByCached(aod::track::collisionId, collision.globalIndex(), cache);
+      auto pertracks = tSample3->sliceBy(perCol, collision.globalIndex());
       auto Ntrk = 0;
 
       // if (collision.selection_bit(aod::evsel::kIsTriggerTVX) && collision.selection_bit(aod::evsel::kNoTimeFrameBorder) && collision.selection_bit(aod::evsel::kNoITSROFrameBorder)) {
@@ -333,7 +339,7 @@ struct MultiplicityCounter {
       if (btrigc[kSel8] && std::abs(z) < 10)
         registry.fill(HIST("hft0multiplicity"), collision.multFT0C());
 
-      for (auto& track : pertracks) {
+      for (const auto& track : pertracks) {
         [[maybe_unused]] int dummy = track.globalIndex();
         if (std::abs(track.eta()) < 1)
           Ntrk++; // charged track check
@@ -370,7 +376,7 @@ struct MultiplicityCounter {
           registry.fill(HIST("hreczvtx"), Double_t(kDATA), Double_t(itrigc), z, cent);
       }
 
-      for (auto& track : pertracks) {
+      for (const auto& track : pertracks) {
         if (btrigc[kSel8] && std::abs(track.eta()) < 0.8 && std::abs(z) < 10)
           registry.fill(HIST("hrecdndpt"), track.pt());
         if (btrigc[kSel8])
@@ -388,13 +394,23 @@ struct MultiplicityCounter {
 
   PresliceUnsorted<soa::Join<MyCollisions, aod::McCollisionLabels>> perMcCol = o2::aod::mccollisionlabel::mcCollisionId;
   Preslice<aod::McParticles> perMCColparticles = aod::mcparticle::mcCollisionId;
+  Preslice<FiLTracks> perColFiLTracks = aod::track::collisionId;
+  using MCex = soa::Join<aod::McCollisions, aod::HepMCXSections>;
   void processMCCounting(
-    aod::McCollisions const& mcCollisions, soa::Join<MyCollisionsCent, aod::McCollisionLabels> const& collisions, Particles const& mcParticles,
+    MCex const& mcCollisions, soa::Join<MyCollisionsCent, aod::McCollisionLabels> const& collisions, Particles const& mcParticles,
     FiLTracks const& tracks)
   {
-    for (auto& mcCollision : mcCollisions) {
+    for (const auto& mcCollision : mcCollisions) {
       Bool_1d bevtc(kECend, false);
       bevtc[kINEL] = true;
+      auto procId = mcCollision.processId();
+      if (procId == 101) {
+        bevtc[kND] = true;
+      } else if (procId == 103 || procId == 104) {
+        bevtc[kSD] = true;
+      } else if (procId == 105 || procId == 106) {
+        bevtc[kDD] = true;
+      }
       registry.fill(HIST("Selection"), 1.);
 
       auto mcz = mcCollision.posZ();
@@ -402,7 +418,7 @@ struct MultiplicityCounter {
 
       auto Ntrk_gen = 0;
       auto particles = mcParticles.sliceByCached(aod::mcparticle::mcCollisionId, mcCollision.globalIndex(), cache);
-      for (auto& particle : particles) {
+      for (const auto& particle : particles) {
         if (!particle.isPhysicalPrimary())
           continue;
         auto kp = pdg->GetParticle(particle.pdgCode());
@@ -426,7 +442,7 @@ struct MultiplicityCounter {
         registry.fill(HIST("Selection"), 10);
       if (bevtc[kINELg0] && std::abs(mcz) < 10)
         registry.fill(HIST("Selection"), 12);
-      for (auto& particle : particles) {
+      for (const auto& particle : particles) {
         if (!particle.isPhysicalPrimary())
           continue;
         auto kp = pdg->GetParticle(particle.pdgCode());
@@ -452,7 +468,7 @@ struct MultiplicityCounter {
       if (collisionsample.size() != 1) {
         cent = -1.0;
       } else {
-        for (auto& collision : collisionsample) {
+        for (const auto& collision : collisionsample) {
           if (IsPbPb) {
             if constexpr (MyCollisionsCent::template contains<aod::CentFT0Cs>())
               cent = collision.centFT0C();
@@ -462,7 +478,7 @@ struct MultiplicityCounter {
 
             // auto Ntrk_rec = 0;
             // auto trackspart = tracks.sliceByCached(aod::track::collisionId, collision.globalIndex(), cache);
-            // for (auto& track : trackspart) {
+            // for (const auto& track : trackspart) {
             //   if (std::abs(track.eta()) < 1) {
             //     Ntrk_rec++;
             //   }
@@ -476,9 +492,9 @@ struct MultiplicityCounter {
       }
       Int_t pid = 0;
       std::vector<Double_t> particleetas;
-      for (auto& particle : particles) {
+      for (const auto& particle : particles) {
         auto p = pdg->GetParticle(particle.pdgCode());
-        if (std::abs(particle.pdgCode()) == 310 && std::abs(particle.eta()) < 0.5 && std::abs(genz) < 10)
+        if (std::abs(particle.pdgCode()) == kK0Short && std::abs(particle.eta()) < 0.5 && std::abs(genz) < 10)
           registry.fill(HIST("Selection"), 17.);
         if (!particle.isPhysicalPrimary()) {
           continue;
@@ -519,7 +535,7 @@ struct MultiplicityCounter {
         }
       }
 
-      for (auto& collision : collisionsample) {
+      for (const auto& collision : collisionsample) {
         auto cent = -1.f;
         if (IsPbPb) {
           if constexpr (MyCollisionsCent::template contains<aod::CentFT0Cs>())
@@ -529,7 +545,7 @@ struct MultiplicityCounter {
             cent = collision.centFT0M();
           // auto Ntrk_rec = 0;
           // auto trackspart = tracks.sliceByCached(aod::track::collisionId, collision.globalIndex(), cache);
-          // for (auto& track : trackspart) {
+          // for (const auto& track : trackspart) {
           //   if (std::abs(track.eta()) < 1) {
           //     Ntrk_rec++;
           //   }
@@ -550,7 +566,7 @@ struct MultiplicityCounter {
         if (bevtc[kINEL] && btrigc[kSel8] && std::abs(z) < 10)
           registry.fill(HIST("hft0multiplicity"), collision.multFT0C());
         if (collisionsample.size() == 1 && bevtc[kINELg0] && btrigc[kSel8]) {
-          for (auto eta : particleetas) {
+          for (const auto& eta : particleetas) {
             registry.fill(HIST("genetaINELg0Sel8recz10"), eta, z);
             registry.fill(HIST("genetaINELg0Sel8genz10"), eta, mcz);
           }
@@ -558,15 +574,15 @@ struct MultiplicityCounter {
           registry.fill(HIST("genzINELg0Sel8"), genz);
         }
         if (collisionsample.size() == 1 && bevtc[kINELg0]) {
-          for (auto eta : particleetas) {
+          for (const auto& eta : particleetas) {
             registry.fill(HIST("genetaINELg0genz10"), eta, mcz);
           }
           registry.fill(HIST("genzINELg0"), genz);
         }
 
         auto Ntrk_rec = 0;
-        auto trackspart = tracks.sliceByCached(aod::track::collisionId, collision.globalIndex(), cache);
-        for (auto& track : trackspart) {
+        auto trackspart = tracks.sliceBy(perColFiLTracks, collision.globalIndex());
+        for (const auto& track : trackspart) {
           if (std::abs(track.eta()) < 1) {
             Ntrk_rec++;
           }
@@ -601,7 +617,7 @@ struct MultiplicityCounter {
           }
         }
         std::vector<Int_t> mclabels;
-        for (auto& track : trackspart) {
+        for (const auto& track : trackspart) {
           if (track.has_mcParticle()) {
             Int_t pid = kBkg;
             auto particle = track.template mcParticle_as<Particles>();
@@ -626,7 +642,7 @@ struct MultiplicityCounter {
             for (auto MotherIDs = particle.mothersIds().front(); MotherIDs <= particle.mothersIds().back(); MotherIDs++) {
               auto mother = mcParticles.rawIteratorAt(MotherIDs);
               auto pdg_mother = mother.pdgCode();
-              if (pdg_mother == 310 || std::abs(pdg_mother) == 3122) {
+              if (pdg_mother == kK0Short || std::abs(pdg_mother) == kLambda0) {
                 pid = kMotherStrange;
               }
             }
@@ -677,7 +693,7 @@ struct MultiplicityCounter {
     }
 
     auto mcCollision = collision.mcCollision();
-    auto particlesPerCol = particles.sliceByCached(aod::mcparticle::mcCollisionId, mcCollision.globalIndex(), cache);
+    auto particlesPerCol = particles.sliceBy(perMCCol, mcCollision.globalIndex());
   }
 
   PROCESS_SWITCH(MultiplicityCounter, processTrackEfficiencyGeneral, "MC Count tracks", false);
@@ -697,7 +713,7 @@ struct MultiplicityCounter {
     auto genz = mcCollision.posZ();
     Bool_1d bevtc(kECend, false);
     bevtc[kINEL] = true;
-    for (auto& particle : mcParticles) {
+    for (const auto& particle : mcParticles) {
       if (!particle.isPhysicalPrimary())
         continue;
       auto p = pdg->GetParticle(particle.pdgCode());
@@ -713,9 +729,9 @@ struct MultiplicityCounter {
         registry.fill(HIST("hgenzvtx"), Double_t(ievtc), genz, -1.0);
     }
     Int_t pid = 0;
-    for (auto& particle : mcParticles) {
+    for (const auto& particle : mcParticles) {
       auto p = pdg->GetParticle(particle.pdgCode());
-      if (std::abs(particle.pdgCode()) == 310 && std::abs(particle.eta()) < 0.5 && std::abs(genz) < 10)
+      if (std::abs(particle.pdgCode()) == kK0Short && std::abs(particle.eta()) < 0.5 && std::abs(genz) < 10)
         registry.fill(HIST("Selection"), 17.);
       if (!particle.isPhysicalPrimary()) {
         continue;
@@ -762,7 +778,7 @@ struct MultiplicityCounter {
     FiTracks const& /*tracks*/,
     DaughterTracks const& /*Dautrks*/)
   {
-    for (auto& collision : collisions) {
+    for (const auto& collision : collisions) {
       if (!collision.sel8())
         continue;
       auto z = collision.posZ();
@@ -777,7 +793,7 @@ struct MultiplicityCounter {
       }
 
       auto v0s_per_coll = fullV0s.sliceBy(perCollisionV0, collision.globalIndex());
-      for (auto& v0 : v0s_per_coll) {
+      for (const auto& v0 : v0s_per_coll) {
 
         auto pTrack = v0.template posTrack_as<DaughterTracks>();
         auto nTrack = v0.template negTrack_as<DaughterTracks>();
@@ -790,12 +806,12 @@ struct MultiplicityCounter {
             continue;
           if (v0.v0cosPA() < v0cospa)
             continue;
-          if (fabs(pTrack.eta()) > 0.9)
+          if (std::fabs(pTrack.eta()) > 0.9)
             continue;
-          if (fabs(nTrack.eta()) > 0.9)
+          if (std::fabs(nTrack.eta()) > 0.9)
             continue;
 
-          if (fabs(v0.eta()) < 0.5)
+          if (std::fabs(v0.eta()) < 0.5)
             registry.fill(HIST("hv0k0s"), v0.mK0Short());
           registry.fill(HIST("hv0mass"), cent, Double_t(kK0short), v0.eta(), Double_t(v0.mK0Short()));
           registry.fill(HIST("hv0mass"), cent, Double_t(kLambda), v0.eta(), Double_t(v0.mLambda()));
@@ -814,7 +830,7 @@ struct MultiplicityCounter {
     soa::Filtered<LabeledTracksEx> const& /*tracks*/,
     DaughterTracks const& /*Dautrks*/)
   {
-    for (auto& collision : collisions) {
+    for (const auto& collision : collisions) {
       auto cent = -1.f;
 
       if (IsPbPb) {
@@ -830,7 +846,7 @@ struct MultiplicityCounter {
       if (!collision.has_mcCollision()) // check mc particle
         continue;
 
-      for (auto& v0 : fullV0s) {
+      for (const auto& v0 : fullV0s) {
 
         auto pTrack = v0.template posTrack_as<DaughterTracks>();
         auto nTrack = v0.template negTrack_as<DaughterTracks>();
