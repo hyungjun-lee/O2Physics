@@ -172,7 +172,10 @@ constexpr int ProcIdDD2 = 106;
 
 // Scoped-enum → int helper
 template <typename E>
-constexpr int toInt(E e) { return static_cast<int>(e); }
+constexpr int toInt(E e)
+{
+  return static_cast<int>(e);
+}
 
 // Weights and Fill values magic numbers
 constexpr float W1 = -10.0f;
@@ -888,7 +891,6 @@ struct DndetaHi {
         continue;
       if (!collision.has_mcCollision()) // check mc particle
         continue;
-
     }
   }
   PROCESS_SWITCH(DndetaHi, processMCV0Counting, "MC V0Count tracks without Centrality", false);
